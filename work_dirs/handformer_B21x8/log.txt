@@ -1,2 +1,0 @@
-[ Thu Nov 28 19:26:32 2024 ] Model total number of params: 7386140
-[ Thu Nov 28 19:29:29 2024 ] Model total number of params: 7386140
