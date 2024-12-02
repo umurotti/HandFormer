@@ -93,7 +93,7 @@ class Feeder(Dataset):
 
                 elif self.rgb_feature_source=='dino':
                     ### Generate the DINOv2 features before running this code. ###
-                    lmdb_path_fullImg = "/home/salman/dinov2_feats_assembly/lmdb_fullImg"
+                    lmdb_path_fullImg = "/mnt/ssd/dinov2_feats_assembly/lmdb_fullImg"
                 elif self.rgb_feature_source=='resnet':
                     lmdb_path_fullImg = "/mnt/data/salman/assembly101_resnet50_feats/lmdb_fullImg"                
 
@@ -107,7 +107,7 @@ class Feeder(Dataset):
                     print("Cropped images' TSM features not available! Abort.")
                     sys.exit()
                 elif self.rgb_feature_source=='dino':
-                    lmdb_path_croppedImg = "/home/salman/dinov2_feats_assembly/lmdb_croppedImg"
+                    lmdb_path_croppedImg = "/mnt/ssd/dinov2_feats_assembly/lmdb_croppedImg"
                 elif self.rgb_feature_source=='resnet':
                     lmdb_path_croppedImg = "/mnt/data/salman/assembly101_resnet50_feats/lmdb_croppedImg_part"
 
@@ -117,7 +117,7 @@ class Feeder(Dataset):
         self.load_data()
 
     def load_verb_obj_breakdown(self):
-        action_csv_path = '/home/salman/Assembly101_FG_annotations/actions.csv'
+        action_csv_path = '/mnt/ssd/assembly101/data/assembly101-annotations/fine-grained-annotations/actions.csv'
         if not os.path.exists(action_csv_path):
             print("actions.csv not found. Correct path in feeder.py load_verb_obj_breakdown()!")
 
@@ -193,6 +193,7 @@ class Feeder(Dataset):
         path_to_pose_pickle = self.data_path + self.split_name + '/' + self.sample_name[index]
         with open(path_to_pose_pickle, 'rb') as f:
             pose_data = pickle.load(f)
+        # calculate total pose frames for current clip
         total_pose_frames = pose_data.shape[1]
         
         if self.sampling_strategy == 'default': # Randomly sample, zero pad or trim.
@@ -230,6 +231,9 @@ class Feeder(Dataset):
             path_to_jpg_list = self.rgb_data_path + self.split_name + '/' + self.sample_name[index]
             with open(path_to_jpg_list, 'rb') as f:
                 jpg_list = pickle.load(f)
+            
+            # calculate total rgb frames for current clip
+            #total_rgb_frames = len(jpg_list)
             
             ### Pick RGB frames based on the selected pose indices ###
             min_idx = selected_indices_pose[0]//2 # 60fps to 30 fps
@@ -319,6 +323,20 @@ class Feeder(Dataset):
         else:
             hit_top_k = [l in rank[i, -top_k:] for i, l in enumerate(self.label)]
         return sum(hit_top_k) * 1.0 / len(hit_top_k)
+
+    def get_total_frame_number(self, index):
+        path_to_pose_pickle = self.data_path + self.split_name + '/' + self.sample_name[index]
+        with open(path_to_pose_pickle, 'rb') as f:
+            pose_data = pickle.load(f)
+            
+        # Pose data retrieved. Now move on to video tensor.
+        path_to_jpg_list = self.rgb_data_path + self.split_name + '/' + self.sample_name[index]
+        with open(path_to_jpg_list, 'rb') as f:
+            jpg_list = pickle.load(f)
+        
+        # return total pose frames and total rgb frames
+        return pose_data.shape[1], len(jpg_list)
+    
 
 if __name__ == '__main__':
     # create an instance of Feeder class

@@ -73,7 +73,7 @@ if __name__ == '__main__':
     # Output
     out_label_path = data_root + 'Label' + data_dir_suffix[3:] # 3: -> Skip 'RAW'
 
-    part = ['train', 'validation', 'test_with_labels']
+    part = ['train', 'validation', 'test']
 
     for p in part:
         data_path_ = os.path.join(data_path, p)

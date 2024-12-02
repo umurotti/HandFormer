@@ -200,7 +200,7 @@ def main():
                     'action_cls', 'verb_cls', 'noun_cls', 'toy_id', 'toy_name', 'is_shared', 'is_RGB']
 
     
-    list_val_type = ['train', 'validation', 'test_with_labels']
+    list_val_type = ['train', 'validation', 'test']
     
     max_frame = [] # Keep records for number of handpose frames per segment
     
