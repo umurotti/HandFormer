@@ -33,10 +33,10 @@ def extract_by_key(env, key):
 
 
 class Feeder(Dataset):
-    def __init__(self, data_path, rgb_data_path, label_path, split_name, target_type='action',
-                 sample_cnt_vid=8, sample_cnt_pose=120, sampling_strategy='default', p_interval=[1.0],
-                 rgb_feature_source='tsm', crop_scale='full', rgb_sampling_within_window='first', pose_fps=60,
-                 debug=False):
+    def __init__(self, data_path, rgb_data_path, label_path, TSM_feature_path, DINO_feature_path, 
+                 annotations_path, split_name, target_type='action', sample_cnt_vid=8, sample_cnt_pose=120,
+                 sampling_strategy='default', p_interval=[1.0], rgb_feature_source='tsm', crop_scale='full',
+                 rgb_sampling_within_window='first', pose_fps=60, debug=False):
         """
         :param data_path: contains processed skeleton/pose data
         :param rgb_data_path: path where the frame lists for clips (path to the jpg) are stored (HAND VID RAW)
@@ -60,6 +60,9 @@ class Feeder(Dataset):
         self.data_path = data_path
         self.rgb_data_path = rgb_data_path
         self.label_path = label_path
+        self.TSM_feature_path = TSM_feature_path
+        self.DINO_feature_path = DINO_feature_path
+        self.annotations_path = annotations_path
         self.split_name = split_name
         self.target_type = target_type
         self.sample_cnt_vid = sample_cnt_vid # 8
@@ -80,20 +83,20 @@ class Feeder(Dataset):
         if self.rgb_feature_source!='none': # If none, no need to load RGB features
             if self.crop_scale in ['full', 'both']: # full sized images are used
                 if self.rgb_feature_source=='tsm':
-                    lmdb_path_fullImg = "/mnt/data/Datasets/Assembly101/TSM_features/C10119_rgb"
+                    lmdb_path_fullImg = os.path.join(self.TSM_feature_path, "C10119_rgb")
                     # Default is view4. Alternative views: C10115_rgb" # C10095_rgb" # C10119_rgb" -- if these are used remember to replace the lmdb key later
                 elif self.rgb_feature_source=='tsm_ego_e4':
                     # Taking ego view 4 --> HMC_84358933_mono10bit or HMC_21179183_mono10bit : e4
-                    lmdb_path_fullImg = "/mnt/data/Datasets/Assembly101/TSM_features/HMC_84358933_mono10bit"
-                    lmdb_path_fullImg_2 = "/mnt/data/Datasets/Assembly101/TSM_features/HMC_21179183_mono10bit"
+                    lmdb_path_fullImg = os.path.join(self.TSM_feature_path, "HMC_84358933_mono10bit")
+                    lmdb_path_fullImg_2 = os.path.join(self.TSM_feature_path,"HMC_21179183_mono10bit")
                 elif self.rgb_feature_source=='tsm_ego_e3':
                     # Taking ego view 3 --> HMC_84355350_mono10bit or HMC_21110305_mono10bit : e3
-                    lmdb_path_fullImg = "/mnt/data/Datasets/Assembly101/TSM_features/HMC_84355350_mono10bit"
-                    lmdb_path_fullImg_2 = "/mnt/data/Datasets/Assembly101/TSM_features/HMC_21110305_mono10bit"
+                    lmdb_path_fullImg = os.path.join(self.TSM_feature_path,"HMC_84355350_mono10bit")
+                    lmdb_path_fullImg_2 = os.path.join(self.TSM_feature_path, "HMC_21110305_mono10bit")
 
                 elif self.rgb_feature_source=='dino':
                     ### Generate the DINOv2 features before running this code. ###
-                    lmdb_path_fullImg = "/mnt/ssd/dinov2_feats_assembly/lmdb_fullImg"
+                    lmdb_path_fullImg = os.path.join(self.DINO_feature_path, "lmdb_fullImg")
                 elif self.rgb_feature_source=='resnet':
                     lmdb_path_fullImg = "/mnt/data/salman/assembly101_resnet50_feats/lmdb_fullImg"                
 
@@ -107,7 +110,7 @@ class Feeder(Dataset):
                     print("Cropped images' TSM features not available! Abort.")
                     sys.exit()
                 elif self.rgb_feature_source=='dino':
-                    lmdb_path_croppedImg = "/mnt/ssd/dinov2_feats_assembly/lmdb_croppedImg"
+                    lmdb_path_croppedImg = os.path.join(self.DINO_feature_path, "lmdb_croppedImg")
                 elif self.rgb_feature_source=='resnet':
                     lmdb_path_croppedImg = "/mnt/data/salman/assembly101_resnet50_feats/lmdb_croppedImg_part"
 
@@ -117,7 +120,7 @@ class Feeder(Dataset):
         self.load_data()
 
     def load_verb_obj_breakdown(self):
-        action_csv_path = '/mnt/ssd/assembly101/data/assembly101-annotations/fine-grained-annotations/actions.csv'
+        action_csv_path = os.path.join(self.annotations_path, 'fine-grained-annotations/actions.csv')
         if not os.path.exists(action_csv_path):
             print("actions.csv not found. Correct path in feeder.py load_verb_obj_breakdown()!")
 

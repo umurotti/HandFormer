@@ -6,9 +6,12 @@ mixed: False # Enable mixed precision for faster training
 feeder: feeders.feeder.Feeder
 # Training
 train_feeder_args:
-  data_path: /mnt/ssd/assembly101/Assembly101_AR_fusion_data/data/HAND_GCN/RAW_contex30_thresh0/
-  rgb_data_path: /mnt/ssd/assembly101/Assembly101_AR_fusion_data/data/HAND_VID/RAW_contex30_thresh0/
-  label_path: /mnt/ssd/assembly101/Assembly101_AR_fusion_data/data/Label_contex30_thresh0/
+  data_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/HAND_GCN/RAW_contex30_thresh0/
+  rgb_data_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/HAND_VID/RAW_contex30_thresh0/
+  label_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/Label_contex30_thresh0/
+  TSM_feature_path: /mnt/ssd/Datasets/assembly101/TSM_features/
+  DINO_feature_path: /mnt/ssd/Datasets/assembly101/dinov2_feats_assembly/
+  annotations_path: /mnt/ssd/Datasets/assembly101/data/assembly101-annotations
   split_name: train
   target_type: action # 'action' (1380 classes) or 'verb' (24 classes) or 'noun' (90 classes)
   pose_fps: 60 # Pose frames per sec. Can reduce until 15 without compromising accuracy. Frames taken across the whole clip.
@@ -22,9 +25,9 @@ train_feeder_args:
   debug: False
 # Test or Validation
 test_feeder_args:
-  data_path: /mnt/ssd/assembly101/Assembly101_AR_fusion_data/data/HAND_GCN/RAW_contex30_thresh0/
-  rgb_data_path: /mnt/ssd/assembly101/Assembly101_AR_fusion_data/data/HAND_VID/RAW_contex30_thresh0/
-  label_path: /mnt/ssd/assembly101/Assembly101_AR_fusion_data/data/Label_contex30_thresh0/
+  data_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/HAND_GCN/RAW_contex30_thresh0/
+  rgb_data_path: /mnt/Datasets/ssd/assembly101/Assembly101_AR_fusion_data/data/HAND_VID/RAW_contex30_thresh0/
+  label_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/Label_contex30_thresh0/
   split_name: validation
   target_type: action # 'action' (1380 classes) or 'verb' (24 classes) or 'noun' (90 classes)
   pose_fps: 60 # Pose frames per sec. Can reduce until 15 without compromising accuracy. Frames taken across the whole clip.
