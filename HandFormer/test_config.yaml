@@ -1,4 +1,4 @@
-work_dir: /home/salman/HandFormer_Assembly101/work_dirs/handformer_B21x8_test/
+work_dir: /home/umurotti/remote_workspace/experiments/HandFormer/work_dirs/handformer_B21x8_test/
 save_score: True
 
 mixed: False # Enable mixed precision for faster training
@@ -6,9 +6,12 @@ feeder: feeders.feeder.Feeder
 
 # Test or Validation
 test_feeder_args:
-  data_path: /home/salman/Assembly101_AR_fusion_data/data/HAND_GCN/RAW_contex30_thresh0/
-  rgb_data_path: /home/salman/Assembly101_AR_fusion_data/data/HAND_VID/RAW_contex30_thresh0/
-  label_path: /home/salman/Assembly101_AR_fusion_data/data/Label_contex30_thresh0/
+  data_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/HAND_GCN/RAW_contex30_thresh0/
+  rgb_data_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/HAND_VID/RAW_contex30_thresh0/
+  label_path: /mnt/ssd/Datasets/assembly101/Assembly101_AR_fusion_data/data/Label_contex30_thresh0/
+  TSM_feature_path: /mnt/ssd/Datasets/assembly101/TSM_features/
+  DINO_feature_path: /mnt/ssd/Datasets/assembly101/dinov2_feats_assembly/
+  annotations_path: /mnt/ssd/Datasets/assembly101/data/assembly101-annotations
   split_name: validation
   target_type: action # 'action' (1380 classes) or 'verb' (24 classes) or 'noun' (90 classes)
   pose_fps: 60 # Pose frames per sec. Can reduce until 15 without compromising accuracy. Frames taken across the whole clip.
@@ -85,4 +88,4 @@ model_args:
 phase: test
 device: [0]
 test_batch_size: 32
-weights: /home/salman/HandFormer_Assembly101/work_dirs/handformer_B21x8/weights/weights-38-52782.pt
+weights: /home/umurotti/remote_workspace/experiments/HandFormer/work_dirs/handformer_B21x8/weights/weights-2-2778.pt

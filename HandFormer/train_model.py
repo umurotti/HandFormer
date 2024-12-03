@@ -527,7 +527,7 @@ class Processor():
                     noun_label = noun_label.long().cuda(self.output_device)
 
                     # forward
-                    output = self.model(data, rgb_data, label)
+                    output = self.model(data, rgb_data)
                     if not isinstance(output, tuple): # If not tuple, then no other loss
                         feat_loss = 0
                     else:
@@ -617,7 +617,10 @@ class Processor():
             self.print_log(f'Parameters:\n{pprint.pformat(vars(self.arg))}\n')
             self.print_log(f'Model total number of params: {count_params(self.model)}')
             self.global_step = self.arg.start_epoch * len(self.data_loader['train']) / self.arg.batch_size
+            # training loop
             for epoch in range(self.arg.start_epoch, self.arg.num_epoch):
+                # save model every save interval epochs or the last epoch
+                # default save interval = 1
                 save_model = ((epoch + 1) % self.arg.save_interval == 0) or (epoch + 1 == self.arg.num_epoch)
                 self.train(epoch, save_model=save_model)
                 self.eval(epoch, save_score=self.arg.save_score, loader_name=['test'])
