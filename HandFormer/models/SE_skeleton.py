@@ -11,6 +11,62 @@ import yaml
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from feeders.feeder import Feeder
 
+class My3DTransform(transforms.Transform3d):
+    def __init__(self, matrix: torch.Tensor = None, R: torch.Tensor = None, t: torch.Tensor = None) -> None:
+        if matrix is not None:
+            # Matrix should be batch of 4x4 SE(3) pytorch matrix
+            assert isinstance(matrix, torch.Tensor) and matrix.shape[-2:] == (4, 4) # matrix: (batch_size, 4, 4)
+            # Assert column base representation for transformation matrix
+            assert torch.allclose(matrix[:, 3, :], torch.tensor([0, 0, 0, 1], device=matrix.device, dtype=matrix.dtype)) # Last row should be [0, 0, 0, 1]
+        elif R is not None and t is not None:
+            # R: (batch_size, 3, 3), t: (batch_size, 3)
+            assert R.dim() == 3 and R.shape[-2:] == (3, 3) # R: (batch_size, 3, 3)
+            assert t.dim() == 2 and t.shape[-1] == 3 # t: (batch_size, 3)
+            matrix = torch.cat([
+                torch.cat([R, t[:, :, None]], dim=-1),
+                torch.tensor([0, 0, 0, 1], device=R.device, dtype=R.dtype)[None, None,:].expand(R.shape[0], -1, -1)
+            ], dim=1)
+        else:
+            raise ValueError("Either matrix or R and t should be provided")
+        
+        '''
+        CONVENTIONS of Pytorch3D:
+        We adopt a right-hand coordinate system, meaning that rotation about an axis with a positive angle results in a counter clockwise rotation.
+
+        This class assumes that transformations are applied on inputs which are row vectors. The internal representation of the Nx4x4 transformation matrix is of the form:
+
+        M = [
+                [Rxx, Ryx, Rzx, 0],
+                [Rxy, Ryy, Rzy, 0],
+                [Rxz, Ryz, Rzz, 0],
+                [Tx,  Ty,  Tz,  1],
+            ]
+
+        To apply the transformation to points, which are row vectors, the latter are converted to homogeneous (4D) coordinates and right-multiplied by the M matrix:
+        points = [[0, 1, 2]]  # (1 x 3) xyz coordinates of a point
+        [transformed_points, 1] ∝ [points, 1] @ M
+
+        '''
+        # We stay in column base representation
+        '''
+        M = [
+                [Rxx,   Rxy,    Rxz,    Tx],
+                [Ryx,   Ryy,    Ryz,    Ty],
+                [Rzx,   Rzy,    Rzz,    Tz],
+                [0,     0,      0,      1],
+            ]
+        '''
+        # Transpose the matrix to convert it to row-base representation used by PyTorch3D
+        super().__init__(matrix=matrix.transpose(-1, -2), device=matrix.device, dtype=matrix.dtype)
+
+    def batch_transform_points(self, points: torch.Tensor) -> torch.Tensor:
+        # points: (no_of_points, 3)
+        assert points.dim() == 2 and points.shape[1] == 3
+        
+        return torch.bmm(
+                        super().get_matrix().transpose(-1, -2)[:, :3, :4], 
+                        torch.cat([points, torch.ones(points.shape[0], 1, device=points.device)], dim=-1).unsqueeze(-1)
+                        ).squeeze(-1) # e_n2_transformed = G*e_n2;
 class Skeleton(ABC):
     def __init__(self, vertices: torch.Tensor) -> None:
         # vertices: (batch_size, sample_cnt_pose=120, 2, joints=21, 3)
@@ -58,8 +114,7 @@ class Skeleton(ABC):
     
     def align_vectors_with_rotation(self, source: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
-        Computes the rotation matrices that align source points to target points for a batch of vectors,
-        without using loops.
+        Computes the rotation matrices that align source points to target points for a batch of vectors.
         
         Args:
             source (torch.Tensor): Source points as a tensor of shape (n, 3).
@@ -111,23 +166,40 @@ class SE_Skeleton(Skeleton):
         # vertices: (batch_size, sample_cnt_pose=120, 2, joints=21, 3)
         super().__init__(vertices)
         
-        self.align_axis = torch.asarray([1, 0, 0], dtype=torch.float32)[None, :] # bais-1 for global x-axis
+        self.align_axis = torch.asarray([1, 0, 0], dtype=torch.float32, device=vertices.device)[None, :] # bais-1 for global x-axis
         self.calculate_C_t()
         self.calculate_c_t()
         
 
     def calculate_C_t(self):
         # edges: (batch_size, sample_cnt_pose=120, no_of_hands=2, no_of_edges=23, start_and_end_positions=2, 3)
-        edge_start = self.edges[:, :, :, :, 0, :] # (batch_size, sample_cnt_pose=120, no_of_edges=23, 3)
-        edge_end = self.edges[:, :, :, :, 1, :] # (batch_size, sample_cnt_pose=120, no_of_edges=23, 3)
+        batch_size, sample_cnt_pose, no_of_hands, no_of_edges, start_and_end_positions, _ = self.edges.shape
+        edge_start = self.edges.reshape(batch_size, sample_cnt_pose, no_of_hands * no_of_edges, start_and_end_positions, -1)[:, :, :, 0, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
+        edge_end = self.edges.reshape(batch_size, sample_cnt_pose, no_of_hands * no_of_edges, start_and_end_positions, -1)[:, :, :, 1, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
+        out = []
+        for batch in range(batch_size):
+            C_t = []
+            for sample in range(sample_cnt_pose):
+                no_total_edges = no_of_hands * no_of_edges # no_total_edges: [0, 1, 2, ..., 46]
+                pairs_n_m = torch.combinations(torch.arange(no_total_edges), 2) # pairs_n_m: [[0, 1], [0, 2], ..., [45, 46]]
+                pairs_m_n = torch.combinations(torch.arange(no_total_edges), 2)[:, [1, 0]] # pairs_n_m: [[1, 0], [2, 0], ..., [46, 45]]
+                pairs = torch.cat((pairs_n_m, pairs_m_n), dim = 0) # pairs: [[0, 1], [0, 2], ..., [45, 46], [1, 0], [2, 0], ..., [46, 45]]
+                if __debug__:
+                    # Number of pairs should be equal to the C(no_total_edges, 2) * 2 = no_total_edges * (no_total_edges - 1)
+                    assert pairs.shape == (no_total_edges * (no_total_edges - 1), 2)
+                # pairs[:, 0]: n
+                e_n1 = edge_start[batch, sample, pairs[:, 0]]
+                e_n2 = edge_end[batch, sample, pairs[:, 0]]
+                # pairs[:, 1]: m
+                e_m1 = edge_start[batch, sample, pairs[:, 1]]
+                e_m2 = edge_end[batch, sample, pairs[:, 1]]
+                
+                # [0]-> Transform3d object, [1]-> Tensor: (no. of pairs, 4, 4)
+                C_t.append(self.calculate_P_t(e_n1, e_n2, e_m1, e_m2)[1])
+                
+            out.append(torch.stack(C_t))
         
-        # Calculate the edge vectors
-        edge_vectors = edge_end - edge_start # (batch_size, sample_cnt_pose=120, no_of_edges=23, 3)
-        
-        # Normalize direction vectors to create a local coordinate system
-        edge_directions = edge_vectors / torch.norm(edge_vectors, dim=-1, keepdim=True)
-        
-        pass
+        return torch.stack(out)
     
     def calculate_c_t(self):
         pass
@@ -161,13 +233,24 @@ class SE_Skeleton(Skeleton):
         t = e_m1 - e_n1 # t = bone2_st - bone1_st;
         
         # Form the transformation matrix in SE(3)
-        G = torch.cat([
-                torch.cat([R, t[:, :, None]], dim=-1),
-                torch.asarray([0, 0, 0, 1], device=R.device, dtype=R.dtype)[None, None,:].expand(R.shape[0], -1, -1)
-            ], dim=1) # G = [R, t; 0, 0, 0, 1];
-        G = transforms.Transform3d(matrix=G.transpose(-1, -2), device='cuda') # se3_points{i} = [R t; [0, 0, 0, 1]];
+        G = My3DTransform(R=R, t=t) # se3_points{i} = [R t; [0, 0, 0, 1]];
         
-        return G
+        if __debug__:
+            e_n1_transformed = G.batch_transform_points(e_n1)
+            e_n2_transformed = G.batch_transform_points(e_n2)
+            
+            e_n_transformed = e_n2_transformed - e_n1_transformed
+            e_m_aligned = e_m2 - e_m1
+            
+            u_n_transformed = e_n_transformed / torch.norm(e_n_transformed, dim = -1, keepdim=True)
+            u_m_aligned = e_m_aligned / torch.norm(e_m_aligned, dim = -1, keepdim=True)
+            
+            # Dot product of unit vectors should be 1 as they are aligned
+            assert torch.allclose(torch.sum(u_n_transformed * u_m_aligned, dim=-1), torch.ones(1, device=u_n_transformed.device))
+            # The starting point of e_m should be the same as the transformed e_n1
+            assert torch.allclose(e_n1_transformed, e_m1)
+            
+        return G, G.get_matrix().transpose(-1, -2) # Transform3d: (batch_size), Tensor: (batch_size, 4, 4)
         
 if __name__ == '__main__':
     main_dir = os.path.dirname(os.path.realpath(__file__))
@@ -178,7 +261,7 @@ if __name__ == '__main__':
     data_loader = {}
     data_loader['train'] = torch.utils.data.DataLoader(
     dataset= Feeder(**(config["train_feeder_args"])),
-    batch_size=5,
+    batch_size=32,
     shuffle=True,
     num_workers=8,
     drop_last=True,)
@@ -186,14 +269,15 @@ if __name__ == '__main__':
     for i, data in enumerate(data_loader['train']):
         if i == 1 or i == 2 or i == 3 or i == 4:
             continue
-        print(data[0].shape) # Pose -> Tensor: [batch_size, 3, sample_cnt_pose=120, joints=21, no_of_hands=2]
-        print(data[1].shape) # RGB -> Tensor: [batch_size, sample_cnt_vid=8, rgb_feature_dim=1536]
+        print("data[0].shape: ", data[0].shape) # Pose -> Tensor: [batch_size, 3, sample_cnt_pose=120, joints=21, no_of_hands=2]
+        print("data[1].shape: ", data[1].shape) # RGB -> Tensor: [batch_size, sample_cnt_vid=8, rgb_feature_dim=1536]
         #print(data[2]) # label -> Tensor: [batch_size]
         #print(data[3]) # verb label -> Tensor: [batch_size]
         #print(data[4]) # noun label -> Tensor: [batch_size]
         #print(data[5]) # index -> Tensor: [batch_size]
         # Example usage
-        hand = SE_Skeleton(data[0].permute(0, 2, 4, 3, 1))
-        hand.calculate_C_t()
-        
-        break
+        # permute the dimensions to (batch_size, sample_cnt_pose=120, no_of_hands=2, joints=21, 3)
+        hand = SE_Skeleton(data[0].permute(0, 2, 4, 3, 1).to('cuda'))
+        C_t = hand.calculate_C_t() # C_t: (batch_size, sample_cnt_pose=120, no_of_pairs=(no_total_edges=no_of_hands*no_of_edges) * (no_total_edges - 1)=2070 , 4, 4)
+        print("C(t).shape: ", C_t.shape)
+        #break
