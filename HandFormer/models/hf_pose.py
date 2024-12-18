@@ -155,26 +155,26 @@ class HF_Pose(nn.Module):
         if self.separate_hands:
             N_, C_, T_, V_, M_ = x.shape
             x = x.permute(0,4,1,2,3).contiguous().view(N_*M_, C_, T_, V_).unsqueeze(-1) # Becomes N, M, C, T, V --> N*M, C, T, V, 1
-            out_all = self.pose_enc(x, global_wrist_token = wrist_feat_token if self.use_global_wrist_reference else None)
-            out_all = out_all.view(N_, M_, -1)
-            out_all = out_all.mean(dim=1) # Take average of two hands
+            encodings = self.pose_enc(x, global_wrist_token = wrist_feat_token if self.use_global_wrist_reference else None)
+            encodings = encodings.view(N_, M_, -1)
+            encodings = encodings.mean(dim=1) # Take average of two hands
         else:
-            out_all = self.pose_enc(x, global_wrist_token = wrist_feat_token if self.use_global_wrist_reference else None) # Becomes (N*8, 256)
+            encodings = self.pose_enc(x, global_wrist_token = wrist_feat_token if self.use_global_wrist_reference else None) # Becomes (N*8, 256)
 
-        out_all = out_all.view(N, num_mactions, -1)
+        encodings = encodings.view(N, num_mactions, -1)
         
         if return_atten_map:
-            out = self.pose_tf(out_all, return_atten_map=return_atten_map)
+            out = self.pose_tf(encodings, return_atten_map=return_atten_map)
             out, atten_map = out
         else:
-            out = self.pose_tf(out_all)
+            out = self.pose_tf(encodings)
 
         out = self.classifier(out)
 
         if return_atten_map:
-            return out, atten_map
+            return out, atten_map#, encodings
         else:
-            return out
+            return out#, encodings
 
 if __name__ == "__main__":
     # For debugging purposes
