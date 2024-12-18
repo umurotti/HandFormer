@@ -1,2 +1,5 @@
-./work_dirs/
+work_dirs/
 *.pyc
+*.txt
+*.png
+*.mp4
