@@ -3,7 +3,7 @@ import sys
 from abc import ABC, abstractmethod
 import os
 import torch
-from lietorch import SE3, SO3
+from einops import rearrange
 from pytorch3d import transforms
 import yaml
 
@@ -174,8 +174,8 @@ class SE_Skeleton(Skeleton):
     def calculate_C_t(self):
         # edges: (batch_size, sample_cnt_pose=120, no_of_hands=2, no_of_edges=23, start_and_end_positions=2, 3)
         batch_size, sample_cnt_pose, no_of_hands, no_of_edges, start_and_end_positions, _ = self.edges.shape
-        edge_start = self.edges.reshape(batch_size, sample_cnt_pose, no_of_hands * no_of_edges, start_and_end_positions, -1)[:, :, :, 0, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
-        edge_end = self.edges.reshape(batch_size, sample_cnt_pose, no_of_hands * no_of_edges, start_and_end_positions, -1)[:, :, :, 1, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
+        edge_start = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 0, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
+        edge_end = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 1, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
         out = []
         for batch in range(batch_size):
             C_t = []
