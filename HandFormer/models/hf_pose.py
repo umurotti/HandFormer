@@ -172,9 +172,9 @@ class HF_Pose(nn.Module):
         out = self.classifier(out)
 
         if return_atten_map:
-            return out, atten_map#, encodings
+            return out, atten_map, encodings
         else:
-            return out#, encodings
+            return out, encodings
 
 if __name__ == "__main__":
     # For debugging purposes

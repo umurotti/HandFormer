@@ -46,7 +46,7 @@ test_feeder_args:
 # Pose-only variant with overlapping microactions
 model: models.hf_pose.HF_Pose
 model_args:
-  microaction_window_size: 15
+  microaction_window_size: 120 # 15
   num_joints: 21 # 21 or 11 or 6
   num_classes: 1380 # For HF_PoseRGB: #actions. For HF_Pose: it can be #verbs, change target_type in feeders accordingly.
 
