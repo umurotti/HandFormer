@@ -3,3 +3,5 @@ work_dirs/
 *.txt
 *.png
 *.mp4
+artifacts/
+wandb/
