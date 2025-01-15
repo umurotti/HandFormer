@@ -100,7 +100,7 @@ class Skeleton(ABC):
             (5, 11), (11, 12), (12, 13), (13, 2),  # Middle finger
             (5, 14), (14, 15), (15, 16), (16, 3),  # Ring finger
             (5, 17), (17, 18), (18, 19), (19, 4),  # Pinky finger
-            #(5, 20), # Wrist COULD NOT UNDERSTAND
+            (5, 20), # Wrist COULD NOT UNDERSTAND
             (6, 8), (8, 11), (11, 14), (14,17)  # Fist line
         ]
         # 5 - wrist joint, 11 - finger-root of middle finger (Assembly101)
