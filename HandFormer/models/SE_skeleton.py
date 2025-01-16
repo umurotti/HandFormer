@@ -173,14 +173,14 @@ class SE_Skeleton(Skeleton):
         
 
     def calculate_C_t(self):
-        # edges: (batch_size, sample_cnt_pose=120, no_of_hands=2, no_of_edges=23, start_and_end_positions=2, 3)
+        # edges: (batch_size, sample_cnt_pose=120, no_of_hands=2, no_of_edges=24, start_and_end_positions=2, 3)
         batch_size, sample_cnt_pose, no_of_hands, no_of_edges, start_and_end_positions, _ = self.edges.shape
-        edge_start = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 0, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
-        edge_end = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 1, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=23, 3)
-        no_total_edges = no_of_hands * no_of_edges # no_total_edges: [0, 1, 2, ..., 46]
-        pairs_n_m = torch.combinations(torch.arange(no_total_edges), 2) # pairs_n_m: [[0, 1], [0, 2], ..., [45, 46]]
-        pairs_m_n = torch.combinations(torch.arange(no_total_edges), 2)[:, [1, 0]] # pairs_n_m: [[1, 0], [2, 0], ..., [46, 45]]
-        pairs = torch.cat((pairs_n_m, pairs_m_n), dim = 0) # pairs: [[0, 1], [0, 2], ..., [45, 46], [1, 0], [2, 0], ..., [46, 45]]
+        edge_start = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 0, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=48, 3)
+        edge_end = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 1, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=48, 3)
+        no_total_edges = no_of_hands * no_of_edges # no_total_edges: [0, 1, 2, ..., 48]
+        pairs_n_m = torch.combinations(torch.arange(no_total_edges), 2) # pairs_n_m: [[0, 1], [0, 2], ..., [47, 48]]
+        pairs_m_n = torch.combinations(torch.arange(no_total_edges), 2)[:, [1, 0]] # pairs_n_m: [[1, 0], [2, 0], ..., [48, 47]]
+        pairs = torch.cat((pairs_n_m, pairs_m_n), dim = 0) # pairs: [[0, 1], [0, 2], ..., [47, 48], [1, 0], [2, 0], ..., [48, 47]]
         
         if __debug__:
             # Number of pairs should be equal to the C(no_total_edges, 2) * 2 = no_total_edges * (no_total_edges - 1)
@@ -193,7 +193,25 @@ class SE_Skeleton(Skeleton):
         e_m1 = edge_start[:, :, pairs[:, 1]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 3)
         e_m2 = edge_end[:, :, pairs[:, 1]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 3)
         
-        return self.calculate_P_t(e_n1, e_n2, e_m1, e_m2)
+        C_t = self.calculate_P_t(e_n1, e_n2, e_m1, e_m2) # C_t: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 4, 4)
+        
+        # Convert to (batch_size, sample_cnt_pose=120, no_of_edges, no_of_edges, 4, 4)
+        # Find the mapping from pairs to the index in the C_t
+        indices = []
+        for i in range(no_total_edges):
+            for j in range(no_total_edges):
+                if i == j:
+                    continue
+                indices.append(torch.where((pairs[:, 0] == i) & (pairs[:, 1] == j)))
+        
+        C_t = C_t[:, :, indices, :, :].reshape(batch_size, sample_cnt_pose, no_total_edges, no_total_edges - 1, 4, 4) # C_t: (batch_size, sample_cnt_pose=120, no_of_edges=23, no_of_edges-1=22, 4, 4)
+        
+        # 
+        identity_matrix = torch.eye(4).unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0).cuda() # Tensor: (1, 1, 1, 1, 4, 4)
+        identity_matrix = identity_matrix.expand(batch_size, sample_cnt_pose, no_total_edges, 1, 4, 4)  # Tensor: (batch_size, sample_cnt_pose, no_total_edges, 1, 4, 4)
+        C_t = torch.cat((identity_matrix, C_t), dim=3)
+        
+        return C_t
     
     
     '''
@@ -256,7 +274,7 @@ if __name__ == '__main__':
     data_loader = {}
     data_loader['train'] = torch.utils.data.DataLoader(
     dataset= Feeder(**(config["train_feeder_args"])),
-    batch_size=256,
+    batch_size=4,
     shuffle=True,
     num_workers=8,
     drop_last=True,)
