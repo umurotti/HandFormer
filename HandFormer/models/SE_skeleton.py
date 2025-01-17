@@ -1,15 +1,24 @@
 import sys
-
 from abc import ABC, abstractmethod
 import os
+import yaml
+
 import torch
 from einops import rearrange
 from pytorch3d import transforms
-import yaml
 
 # Add the directory containing `feeders` to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from feeders.feeder import Feeder
+
+def se3_log_map_as_columns(x):
+    # takes a batch of SE3 matrices and returns a batch of se3 vectors
+    # x:= Tensor: (batch_size, 4, 4)
+    # returns: Tensor: (batch_size, 6)
+    if __debug__:
+        assert x.shape[1:] == (4, 4), f"Expected input to have shape (batch_size, 4, 4), but got {x.shape}"
+    
+    return transforms.se3_log_map(x.transpose(-1, -2))
 
 class My3DTransform(transforms.Transform3d):
     def __init__(self, matrix: torch.Tensor = None, R: torch.Tensor = None, t: torch.Tensor = None) -> None:
@@ -178,22 +187,22 @@ class SE_Skeleton(Skeleton):
         edge_start = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 0, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=48, 3)
         edge_end = rearrange(self.edges, 'b s n e p ... -> b s (n e) p ...', b=batch_size, s=sample_cnt_pose, n=no_of_hands, e=no_of_edges, p=start_and_end_positions)[:, :, :, 1, :] # (batch_size, sample_cnt_pose=120, no_of_hands*no_of_edges=48, 3)
         no_total_edges = no_of_hands * no_of_edges # no_total_edges: [0, 1, 2, ..., 48]
-        pairs_n_m = torch.combinations(torch.arange(no_total_edges), 2) # pairs_n_m: [[0, 1], [0, 2], ..., [47, 48]]
-        pairs_m_n = torch.combinations(torch.arange(no_total_edges), 2)[:, [1, 0]] # pairs_n_m: [[1, 0], [2, 0], ..., [48, 47]]
-        pairs = torch.cat((pairs_n_m, pairs_m_n), dim = 0) # pairs: [[0, 1], [0, 2], ..., [47, 48], [1, 0], [2, 0], ..., [48, 47]]
+        pairs_n_m = torch.combinations(torch.arange(no_total_edges), 2) # pairs_n_m: [[0, 1], [0, 2], ..., [46, 47]]
+        pairs_m_n = torch.combinations(torch.arange(no_total_edges), 2)[:, [1, 0]] # pairs_n_m: [[1, 0], [2, 0], ..., [47, 46]]
+        pairs = torch.cat((pairs_n_m, pairs_m_n), dim = 0) # pairs: [[0, 1], [0, 2], ..., [46, 47], [1, 0], [2, 0], ..., [47, 46]]
         
         if __debug__:
             # Number of pairs should be equal to the C(no_total_edges, 2) * 2 = no_total_edges * (no_total_edges - 1)
             assert pairs.shape == (no_total_edges * (no_total_edges - 1), 2)
         
         # pairs[:, 0]: n
-        e_n1 = edge_start[:, :, pairs[:, 0]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 3)
-        e_n2 = edge_end[:, :, pairs[:, 0]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 3)
+        e_n1 = edge_start[:, :, pairs[:, 0]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2256, 3)
+        e_n2 = edge_end[:, :, pairs[:, 0]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2256, 3)
         # pairs[:, 1]: m
-        e_m1 = edge_start[:, :, pairs[:, 1]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 3)
-        e_m2 = edge_end[:, :, pairs[:, 1]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 3)
+        e_m1 = edge_start[:, :, pairs[:, 1]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2256, 3)
+        e_m2 = edge_end[:, :, pairs[:, 1]] # Tensor: (batch_size, sample_cnt_pose=120, no_of_pairs=2256, 3)
         
-        C_t = self.calculate_P_t(e_n1, e_n2, e_m1, e_m2) # C_t: (batch_size, sample_cnt_pose=120, no_of_pairs=2070, 4, 4)
+        C_t = self.calculate_P_t(e_n1, e_n2, e_m1, e_m2) # C_t: (batch_size, sample_cnt_pose=120, no_of_pairs=2256, 4, 4)
         
         # Convert to (batch_size, sample_cnt_pose=120, no_of_edges, no_of_edges, 4, 4)
         # Find the mapping from pairs to the index in the C_t
@@ -206,11 +215,17 @@ class SE_Skeleton(Skeleton):
         
         C_t = C_t[:, :, indices, :, :].reshape(batch_size, sample_cnt_pose, no_total_edges, no_total_edges - 1, 4, 4) # C_t: (batch_size, sample_cnt_pose=120, no_of_edges=23, no_of_edges-1=22, 4, 4)
         
-        # 
+        # Add identity matrix to the C_t
         identity_matrix = torch.eye(4).unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0).cuda() # Tensor: (1, 1, 1, 1, 4, 4)
         identity_matrix = identity_matrix.expand(batch_size, sample_cnt_pose, no_total_edges, 1, 4, 4)  # Tensor: (batch_size, sample_cnt_pose, no_total_edges, 1, 4, 4)
         C_t = torch.cat((identity_matrix, C_t), dim=3)
         
+        # Convert to Lie Algebra by taking the log map
+        C_t = rearrange(
+                            se3_log_map_as_columns(
+                                rearrange(C_t, 'b s e1 e2 ... -> (b s e1 e2) ...', b=batch_size, s=sample_cnt_pose, e1=no_total_edges, e2=no_total_edges) # (batch_size*sample_cnt_pose*no_total_edges*no_total_edges, 4, 4)
+                            ), '(b s e1 e2) ... -> b s e1 e2 ...', b=batch_size, s=sample_cnt_pose, e1=no_total_edges, e2=no_total_edges # (batch_size, sample_cnt_pose=120, no_of_edges=23, no_of_edges=22, 6)
+                        ) # (batch_size, sample_cnt_pose=120, no_of_edges=23, no_of_edges-1=22, 6)
         return C_t
     
     
