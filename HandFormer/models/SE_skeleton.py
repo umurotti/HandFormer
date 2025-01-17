@@ -213,19 +213,19 @@ class SE_Skeleton(Skeleton):
                     continue
                 indices.append(torch.where((pairs[:, 0] == i) & (pairs[:, 1] == j)))
         
-        C_t = C_t[:, :, indices, :, :].reshape(batch_size, sample_cnt_pose, no_total_edges, no_total_edges - 1, 4, 4) # C_t: (batch_size, sample_cnt_pose=120, no_of_edges=23, no_of_edges-1=22, 4, 4)
+        C_t = C_t[:, :, indices, :, :].reshape(batch_size, sample_cnt_pose, no_total_edges, no_total_edges - 1, 4, 4) # C_t: (batch_size, sample_cnt_pose=120, no_of_edges=24, no_of_edges-1=23, 4, 4)
         
         # Add identity matrix to the C_t
         identity_matrix = torch.eye(4).unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0).cuda() # Tensor: (1, 1, 1, 1, 4, 4)
         identity_matrix = identity_matrix.expand(batch_size, sample_cnt_pose, no_total_edges, 1, 4, 4)  # Tensor: (batch_size, sample_cnt_pose, no_total_edges, 1, 4, 4)
-        C_t = torch.cat((identity_matrix, C_t), dim=3)
+        C_t = torch.cat((identity_matrix, C_t), dim=3) # Tensor: (batch_size, sample_cnt_pose=120, no_of_edges=24, no_of_edges=24, 4, 4)
         
         # Convert to Lie Algebra by taking the log map
         C_t = rearrange(
                             se3_log_map_as_columns(
                                 rearrange(C_t, 'b s e1 e2 ... -> (b s e1 e2) ...', b=batch_size, s=sample_cnt_pose, e1=no_total_edges, e2=no_total_edges) # (batch_size*sample_cnt_pose*no_total_edges*no_total_edges, 4, 4)
-                            ), '(b s e1 e2) ... -> b s e1 e2 ...', b=batch_size, s=sample_cnt_pose, e1=no_total_edges, e2=no_total_edges # (batch_size, sample_cnt_pose=120, no_of_edges=23, no_of_edges=22, 6)
-                        ) # (batch_size, sample_cnt_pose=120, no_of_edges=23, no_of_edges-1=22, 6)
+                            ), '(b s e1 e2) ... -> b s e1 e2 ...', b=batch_size, s=sample_cnt_pose, e1=no_total_edges, e2=no_total_edges
+                        ) # Tensor: (batch_size, sample_cnt_pose=120, no_of_edges=24, no_of_edges=24, 6)
         return C_t
     
     
