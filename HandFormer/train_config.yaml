@@ -13,7 +13,7 @@ train_feeder_args:
   DINO_feature_path: /mnt/ssd/Datasets/assembly101/dinov2_feats_assembly/
   annotations_path: /mnt/ssd/Datasets/assembly101/data/assembly101-annotations
   split_name: train
-  target_type: action # 'action' (1380 classes) or 'verb' (24 classes) or 'noun' (90 classes)
+  target_type: verb # 'action' (1380 classes) or 'verb' (24 classes) or 'noun' (90 classes)
   pose_fps: 60 # Pose frames per sec. Can reduce until 15 without compromising accuracy. Frames taken across the whole clip.
   sample_cnt_pose: 120 # Number of pose frames used in the model.
   sample_cnt_vid: 8 # Number of RGB frames to sample from the video.
@@ -32,7 +32,7 @@ test_feeder_args:
   DINO_feature_path: /mnt/ssd/Datasets/assembly101/dinov2_feats_assembly/
   annotations_path: /mnt/ssd/Datasets/assembly101/data/assembly101-annotations
   split_name: validation
-  target_type: action # 'action' (1380 classes) or 'verb' (24 classes) or 'noun' (90 classes)
+  target_type: verb # 'action' (1380 classes) or 'verb' (24 classes) or 'noun' (90 classes)
   pose_fps: 60 # Pose frames per sec. Can reduce until 15 without compromising accuracy. Frames taken across the whole clip.
   sample_cnt_pose: 120 # Number of pose frames used in the model.
   sample_cnt_vid: 8 # Number of RGB frames to sample from the video.
@@ -46,9 +46,9 @@ test_feeder_args:
 # Pose-only variant with overlapping microactions
 model: models.hf_pose.HF_Pose
 model_args:
-  microaction_window_size: 120 # 15
+  microaction_window_size: 15
   num_joints: 21 # 21 or 11 or 6
-  num_classes: 1380 # For HF_PoseRGB: #actions. For HF_Pose: it can be #verbs, change target_type in feeders accordingly.
+  num_classes: 24 # For HF_PoseRGB: #actions. For HF_Pose: it can be #verbs, change target_type in feeders accordingly.
 
   embedding_dim_final: 256
   use_2d_pose: False
